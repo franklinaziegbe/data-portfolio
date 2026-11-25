@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Large or downloaded data (re-create with the download scripts)
+cohort-retention-pvm/data/raw/
+cohort-retention-pvm/data/online_retail_ii.csv.gz
+
+# OS
+.DS_Store
+Thumbs.db

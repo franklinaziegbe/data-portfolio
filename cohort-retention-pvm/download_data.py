@@ -2,6 +2,7 @@
 
 Run:  python download_data.py
       python download_data.py --skip-download   (if you downloaded the file by hand)
+      python download_data.py --mirror          (backup copy; needs pip install pyreadr)
 
 Source: Chen, D. (2012). Online Retail II [Dataset]. UCI Machine Learning Repository.
         https://doi.org/10.24432/C5CG6D  (license: CC BY 4.0)
@@ -22,6 +23,8 @@ RAW_DIR = DATA_DIR / "raw"
 OUTPUT = DATA_DIR / "online_retail_ii.csv.gz"
 ZIP_URL = "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip"
 DATASET_PAGE = "https://archive.ics.uci.edu/dataset/502/online+retail+ii"
+# Backup source: the same data bundled in the onlineretail2 R package (1,067,371 rows, Dec 2009 to Dec 2011).
+MIRROR_URL = "https://raw.githubusercontent.com/allanvc/onlineretail2/master/data/onlineretail2.rda"
 
 
 def download_zip() -> Path:
@@ -54,18 +57,40 @@ def convert(xlsx_path: Path, output: Path = OUTPUT) -> pd.DataFrame:
     return df
 
 
+def download_from_mirror(output: Path = OUTPUT) -> pd.DataFrame:
+    """Backup: read the copy bundled in the onlineretail2 R package. Needs `pip install pyreadr`."""
+    try:
+        import pyreadr
+    except ImportError:
+        raise SystemExit("The backup source needs pyreadr: pip install pyreadr")
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    rda_path = RAW_DIR / "onlineretail2.rda"
+    print(f"Downloading backup copy from {MIRROR_URL} ...")
+    urllib.request.urlretrieve(MIRROR_URL, rda_path)
+    df = next(iter(pyreadr.read_r(rda_path).values()))
+    df = df.rename(columns={"CustomerID": "Customer ID"})
+    df.to_csv(output, index=False, compression="gzip")
+    print(f"Saved {len(df):,} rows to {output}")
+    return df
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--skip-download", action="store_true", help="Use an .xlsx already in data/raw/")
+    parser.add_argument("--mirror", action="store_true", help="Use the backup copy (onlineretail2 R package)")
     args = parser.parse_args()
 
+    if args.mirror:
+        download_from_mirror()
+        return
     if not args.skip_download:
         try:
             download_zip()
         except Exception as exc:
             raise SystemExit(
                 f"Download failed ({exc.__class__.__name__}: {exc}).\n"
-                f"Download it by hand from {DATASET_PAGE}, unzip it, put online_retail_II.xlsx in {RAW_DIR}, "
+                f"Try the backup copy: python download_data.py --mirror\n"
+                f"Or download it by hand from {DATASET_PAGE}, unzip it, put online_retail_II.xlsx in {RAW_DIR}, "
                 "then run: python download_data.py --skip-download"
             )
     convert(find_workbook())

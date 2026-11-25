@@ -88,6 +88,33 @@ def score_predictions(predictions: pd.DataFrame, standings: pd.DataFrame, top_n:
     return detail, leaderboard
 
 
+def score_full_table(predictions: pd.DataFrame, standings: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    """Alternative rule that also punishes leaving out a team that's actually good.
+
+    Every team counts, not just the ones you picked:
+      - a team you didn't pick is treated as if you ranked it just outside your list (top_n + 1)
+      - a team that's actually outside the top N counts as top_n + 1 too, so missing the cut by
+        1 spot or by 5 costs the same
+    Error per team = |your position - actual position|, summed over all teams.
+
+    Returns one row per player with full_table_error and place.
+    """
+    validate(predictions, standings)
+    outside = top_n + 1
+    actual = standings.assign(key=standings["team"].map(_clean))
+    actual["actual_pos"] = actual["rank"].clip(upper=outside)
+
+    rows = []
+    for player, picks in predictions[predictions["predicted_rank"] <= top_n].groupby("player"):
+        picked = dict(zip(picks["team"].map(_clean), picks["predicted_rank"]))
+        pred_pos = actual["key"].map(picked).fillna(outside)
+        rows.append({"player": player, "full_table_error": int((pred_pos - actual["actual_pos"]).abs().sum())})
+
+    board = pd.DataFrame(rows).sort_values("full_table_error").reset_index(drop=True)
+    board.insert(0, "place", board["full_table_error"].rank(method="min").astype(int))
+    return board
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--predictions", type=Path, default=DATA_DIR / "sample_predictions.csv")
